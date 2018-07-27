@@ -1,6 +1,6 @@
 # GSM extractor<br>
 **AUTHOR:** Jean-François Nadeau<br>
-  * This script is used to extract pertinent info from a GSM native XML file from the sra database.<br>
+  * This script is used to extract pertinent info in natives XML files from the sra database.<br>
   * For some  type of experiments like ChIP-Seq, it will also search the targeted protein.<br>
 
 **USAGE:**<br>
