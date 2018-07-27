@@ -134,6 +134,13 @@ def get_flagged(regex_dictio,field,flags):
 def get_line(local,file):
     return read_xml.fields(file,local)
 
+def get_strain(attributes,title):
+    strain=""
+    for att in attributes.lower().split(" | "):
+        if any(x in att for x in ["strain:","strain name:","strain number:","cell description:"]):
+            strain=att.split(":")[1]
+                
+    return strain
 
 #This function search for targets in a given field
 def search_all_targets(regex_dictio,field):
@@ -200,6 +207,7 @@ def rm_deltas(regex_dictio,target_list,field):
 
 # Process line according to the library strategy
 def process_line(regex_dictio,line):
+    strain=""
     GSM=list(set(re.findall("GSM[0-9]+",str(line))))
     if GSM:
         if len(GSM)==1:
@@ -211,6 +219,7 @@ def process_line(regex_dictio,line):
                     target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
                     if confidence==0:
                         target,confidence=search_target(regex_dictio,line["ATTRIBUTES"],line["SAMPLE_TITLE"],flags)
+                        strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
                 else:
                     line["LIB_STRAT"]=strat
                     confidence=0
@@ -218,9 +227,9 @@ def process_line(regex_dictio,line):
             else:
                 target=line["LIB_STRAT"]
                 confidence=0
-
+            line["STRAIN"]=strain
             #print("\t".join([GSM[0],str(confidence),target]))
-            print(line)
+            print(line["STRAIN"])
 
 
 
