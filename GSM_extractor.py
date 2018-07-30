@@ -31,7 +31,7 @@ from Bio import Entrez
 """
 def main():
     # Read arguments
-    regex_dictio=get_dict()
+    regex_dictio=get_dict("saccharomyces_cerevisiae")
     args=read_config()
     try:
         cores=sys.argv[1]
@@ -228,8 +228,8 @@ def process_line(regex_dictio,line):
                 target=line["LIB_STRAT"]
                 confidence=0
             line["STRAIN"]=strain
-            #print("\t".join([GSM[0],str(confidence),target]))
-            print(line["STRAIN"])
+            print("\t".join([GSM[0],str(confidence),target]))
+            #print(line["STRAIN"])
 
 
 
@@ -247,16 +247,25 @@ def clear_outdir(dirPath):
 
 
 #Build and return the regex_dict
-def get_dict():
-    dictio={}
+def get_dict(org):
+    org_dictio={}
+    common_dictio={}
     lines=[]
-    with open("saccer_dict.txt","r") as f:
+    f=org+".dict"
+    with open(f,"r") as f:
         lines=f.readlines()
     for line in lines:
         if line!="\n" and line!="":
             line=line.rstrip("\n").split(",")
-            dictio[line[0]]=line[1]
-    targets=OrderedDict(dictio)
+            org_dictio[line[0]]=line[1]
+    with open("common.dict","r") as f:
+        lines=f.readlines()
+    for line in lines:
+        if line!="\n" and line!="":
+            line=line.rstrip("\n").split(",")
+            common_dictio[line[0]]=line[1]
+    targets=OrderedDict(org_dictio)
+    targets.update(OrderedDict(common_dictio))
     return targets
 
 
