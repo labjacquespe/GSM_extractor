@@ -34,11 +34,10 @@ def main():
     regex_dictio=get_dict("saccharomyces_cerevisiae")
     args=read_config()
     try:
-        cores=sys.argv[1]
+        cores=int(sys.argv[1])
         path=sys.argv[2]
     except:
         print_help()
-        quit()
     ### ONLINE MODE ###
     if path=="online":
         clear_outdir("xml_directory")
@@ -46,21 +45,23 @@ def main():
         xml_out=args["xml_out"]
         for org in args["Organisms"].split(","):
             date=args['Date_range'].split(":")
+            
+            years=[]
             for year in range(int(date[0].split("/")[0]),int(date[1].split("/")[0])+1):
-                query_list=build_query(args, org, str(year))
-                online_mode(regex_dictio,query_list,cores,xml_out) # THIS FUNCTION WILL GET THE HANDLE, AND RUN THE SCRIPT FOR EACH ID IN THE HANDLE IN PARALLEL
+                years.append(year)
+            pool=Pool(processes=min(cores,len(years)))
+            func=partial(pool_query,regex_dictio,args,org,cores,xml_out)
+            pool.map(func,years)
+
+                
     ### LOCAL MODE ###
     else:
         path=path.rstrip("/")
         for root, dirs, files in os.walk(path):
             files=["{}/{}".format(path,filename) for filename in files]
-            pool=Pool(processes=int(cores))
-            func = partial(get_line,True) 
-            lines=pool.map(func,files)
-            func = partial(process_line,regex_dictio)
-            lines=pool.map(func, lines)
-
-
+            pool=Pool(processes=cores)
+            func = partial(get_line,regex_dictio,True) 
+            pool.map(func,files)
 
 
 """ ###############################################################################
@@ -131,8 +132,9 @@ def get_flagged(regex_dictio,field,flags):
 
 
 # extract pertinent info from a given xml file
-def get_line(local,file):
-    return read_xml.fields(file,local)
+def get_line(regex_dictio,local,file):
+    line=read_xml.fields(file,local)
+    process_line(regex_dictio,line)
 
 def get_strain(attributes,title):
     strain=""
@@ -271,15 +273,6 @@ def get_dict(org):
     return targets
 
 
-# Read sets the nomber of cores to use
-def parallel_processes(arguments):
-    if len(arguments)>1:
-        cores=int(arguments[1])
-    else:
-        cores=4
-    return cores
-
-
 def print_help():
     text="""SCRIPT: GSM_extractor.py
     This script is used to extract pertinent info from a GSM native XML file from the sra database.
@@ -295,6 +288,7 @@ def print_help():
 
     NOTE: To use the online mode, please fill the config.ini files that contains the information for the Entrez query and the output directory for the xml files."""
     print(text)
+    quit()
 
 
 # Read and return the config file
@@ -364,8 +358,7 @@ def efetch(regex_dictio,xml_out,id):
             filename=temp
         with open(filename,"w") as f:
             f.write("".join(sample))
-        line=get_line(False,sample)
-        process_line(regex_dictio,line)
+        get_line(regex_dictio,False,sample)
 
 # Send esearch query and return the resulting dictionary (containing the count, id of the samples etc...)
 def get_sra_handle(query, database):
@@ -378,13 +371,16 @@ def online_mode(regex_dictio,query_list,cores,xml_out):
     #Ajusting the month range if the user specified it
     for query in query_list:
         esearch_dic=get_sra_handle(query, "sra")
-        pool=Pool(processes=int(cores))
+        if int(esearch_dic["Count"])>cores:
+            cores=int(esearch_dic["Count"])
         if str(esearch_dic["Count"])!="0":
             if esearch_dic['IdList']:
-                    func=partial(efetch,regex_dictio,xml_out)
-                    pool.map(func,esearch_dic['IdList'])
+                for ID in esearch_dic['IdList']:
+                    efetch(regex_dictio,xml_out,ID)
 
-
+def pool_query(regex_dictio,args,org,cores,xml_out,year):
+    query_list=build_query(args, org, str(year))
+    online_mode(regex_dictio,query_list,cores,xml_out)
 
 
 
