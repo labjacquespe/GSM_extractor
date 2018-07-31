@@ -357,7 +357,7 @@ def efetch(regex_dictio,xml_out,id):
             number=2
             temp=filename
             while os.path.isfile(temp):
-                temp="{}_{}.xml".format(filename.rstrip(r".xml"),number)
+                temp="{}_{}.xml".format(filename.rstrip(".xml"),number)
                 number+=1
             filename=temp
         with open(filename,"w") as f:
@@ -379,8 +379,11 @@ def online_mode(regex_dictio,query_list,cores,xml_out):
         pool=Pool(processes=int(cores))
         if str(esearch_dic["Count"])!="0":
             if esearch_dic['IdList']:
-                func=partial(efetch,regex_dictio,xml_out)
-                pool.map(func,esearch_dic['IdList'])
+                    func=partial(efetch,regex_dictio,xml_out)
+                    for n in esearch_dic['IdList']:
+                        if type(n)=="_io.BufferedReader":
+                            return
+                    pool.map(func,esearch_dic['IdList'])
 
 
 
