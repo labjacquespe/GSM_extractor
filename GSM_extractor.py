@@ -213,9 +213,9 @@ def process_line(regex_dictio,line):
         if len(GSM)==1:
             flags={"FLAG":"([^_\\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\\s]+|flag)","MYC":"([^_\\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\\s]+|(c-)?myc|9e10)","V5":"([^_\\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\\s]+|v5)","TAP":"([^_\\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\\s]+|tap)","HA":"([^_\\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\\s]+|ha)","GFP":"([^_\\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\\s]+|gfp)","T7":"([^_\\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\\s]+|t7)"}
             joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
-            if any(x in joined.lower() for x in ["chip-seq","chip-exo"]) or line["LIB_STRAT"].lower()=="other":
+            if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq"]) or line["LIB_STRAT"].lower()=="other":
                 strat=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
-                if any(x in strat.lower() for x in ["chip-seq","chip-exo","cut-and-run"]):
+                if any(x in strat.lower() for x in ["chip-seq","chip-exo","mnase-seq"]):
                     target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
                     if confidence==0:
                         target,confidence=search_target(regex_dictio,line["ATTRIBUTES"],line["SAMPLE_TITLE"],flags)
@@ -227,8 +227,10 @@ def process_line(regex_dictio,line):
             else:
                 target=line["LIB_STRAT"]
                 confidence=0
+            if target=="not_found" and line["LIB_STRAT"].lower()=="mnase-seq":
+                target="mnase-seq"
             line["STRAIN"]=strain
-            print("\t".join([GSM[0],str(confidence),target]))
+            print("\t".join([GSM[0],line["LIB_STRAT"],str(confidence),target]))
             #print(line["STRAIN"])
 
 
