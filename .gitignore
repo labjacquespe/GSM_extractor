@@ -1,0 +1,6 @@
+dev/*
+__pycache__/*
+xml/*
+xml_directory/*
+*.ignore
+targets.txt
