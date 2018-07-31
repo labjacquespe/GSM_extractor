@@ -380,9 +380,6 @@ def online_mode(regex_dictio,query_list,cores,xml_out):
         if str(esearch_dic["Count"])!="0":
             if esearch_dic['IdList']:
                     func=partial(efetch,regex_dictio,xml_out)
-                    for n in esearch_dic['IdList']:
-                        if type(n)=="_io.BufferedReader":
-                            return
                     pool.map(func,esearch_dic['IdList'])
 
 
