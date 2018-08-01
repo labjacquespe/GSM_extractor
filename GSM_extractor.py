@@ -165,8 +165,17 @@ def search_this_target(regex_dictio,field,t):
 def search_target(regex_dictio,attributes,title,flags):
     lvl1_1,lvl1_2,lvl1_3,lvl2,lvl3,lvl4=[],[],[],[],[],[]
     # CONFIDENCE_1
+    if "1st ip:" in attributes.lower():
+        hits=[]
+        pair=" ".join(title.split("-")[1:])
+        for t in regex_dictio:
+            if re.search(regex_dictio[t],pair.lower()):
+                hits.append(t)
+        if "input" in pair.lower():
+            hits.append("input")
+        return "/".join(hits),1
     for att in attributes.lower().split(" | "):
-        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","1st ip:","antibody #lot number:", "epitope tags:"]):
+        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             flagged1=flagged2=[]
             for f in flags:
                 if re.search(flags[f],att):
@@ -214,9 +223,9 @@ def process_line(regex_dictio,line):
         if len(GSM)==1:
             flags={"FLAG":"([^_\\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\\s]+|flag)","MYC":"([^_\\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\\s]+|(c-)?myc|9e10)","V5":"([^_\\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\\s]+|v5)","TAP":"([^_\\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\\s]+|tap)","HA":"([^_\\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\\s]+|ha)","GFP":"([^_\\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\\s]+|gfp)","T7":"([^_\\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\\s]+|t7)"}
             joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
-            if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq"]) or line["LIB_STRAT"].lower()=="other":
+            if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or line["LIB_STRAT"].lower()=="other":
                 strat=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
-                if any(x in strat.lower() for x in ["chip-seq","chip-exo","mnase-seq"]):
+                if any(x in strat.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]):
                     target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
                     if confidence==0:
                         target,confidence=search_target(regex_dictio,line["ATTRIBUTES"],line["SAMPLE_TITLE"],flags)
