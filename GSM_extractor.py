@@ -146,9 +146,10 @@ def get_strain(attributes,title):
 #This function search for targets in a given field
 def search_all_targets(regex_dictio,field):
     hits=[]
-    for t in regex_dictio:
-        if re.search(regex_dictio[t], field):
-            hits.append(t)
+    if field:
+        for t in regex_dictio:
+            if re.search(regex_dictio[t], str(field).lower()):
+                hits.append(t)
     return hits
 
 
@@ -156,7 +157,7 @@ def search_all_targets(regex_dictio,field):
 def search_this_target(regex_dictio,field,t):
     hits=[]
     if field:
-        if re.search(regex_dictio[t], str(field)):
+        if re.search(regex_dictio[t], str(field).lower()):
             hits.append(t)
     return hits
 
@@ -175,7 +176,7 @@ def search_target(regex_dictio,attributes,title,flags):
             hits.append("input")
         return "/".join(hits),1
     for att in attributes.lower().split(" | "):
-        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:","labeled protein:"]):
+        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             flagged1=flagged2=[]
             for f in flags:
                 if re.search(flags[f],att):
@@ -221,7 +222,7 @@ def process_line(regex_dictio,line):
     GSM=list(set(re.findall("GSM[0-9]+",str(line))))
     if GSM:
         if len(GSM)==1:
-            flags={"FLAG":"([^_\\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\\s]+|flag)","MYC":"([^-_\\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\\s]+|(c-)?myc|9e10)","V5":"([^_\\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\\s]+|v5)","TAP":"([^_\\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\\s]+|tap)","HA":"([^_\\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\\s]+|ha)","GFP":"([^_\\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\\s]+|gfp)","T7":"([^_\\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\\s]+|t7)"}
+            flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
             joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
             if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or line["LIB_STRAT"].lower()=="other":
                 strat=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
