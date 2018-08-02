@@ -187,8 +187,10 @@ def search_target(regex_dictio,attributes,title,flags):
                 lvl1_1+=search_this_target(regex_dictio,att,t)
                 lvl1_2+=search_this_target(regex_dictio,flagged1,t)
                 lvl1_3+=search_this_target(regex_dictio,flagged2,t)
-        elif "source name:" in att or "antibody #lot number:" in att:
-            lvl2=rm_deltas(regex_dictio,search_all_targets(regex_dictio,att),att)
+        elif any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
+            source_hits=search_all_targets(regex_dictio,att)
+            if len(source_hits)==1:
+                return source_hits[0],2
     # CONFIDENCE_2_TO_4
     if not lvl1_1+lvl1_2+lvl1_3:
         if len(lvl3)==1:
@@ -238,7 +240,7 @@ def process_line(regex_dictio,line):
             else:
                 target=line["LIB_STRAT"]
                 confidence=0
-            if target=="not_found" and line["LIB_STRAT"].lower()=="mnase-seq":
+            if line["LIB_STRAT"].lower()=="mnase-seq" and confidence in [0,5]:
                 target="mnase-seq"
             line["STRAIN"]=strain
             print("\t".join([GSM[0],line["LIB_STRAT"],str(confidence),target]))
