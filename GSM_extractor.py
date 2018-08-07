@@ -178,14 +178,16 @@ def search_target(regex_dictio,attributes,title,flags):
                 lvl1_1+=search_this_target(regex_dictio,att,t)
                 lvl1_2+=search_this_target(regex_dictio,flagged1,t)
                 lvl1_3+=search_this_target(regex_dictio,flagged2,t)
-        elif any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
-            source_hits=search_all_targets(regex_dictio,att)
-            if len(source_hits)==1:
-                return source_hits[0],2
         lvl1=return_best_list([lvl1_1,lvl1_2,lvl1_3])
+    #print(lvl1,"\n\n")
     if lvl1:
         return lvl1[0],1
     else:
+        for att in attributes.lower().split(" | "):
+            if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
+                source_hits=search_all_targets(regex_dictio,att)
+                if len(source_hits)==1:
+                    return source_hits[0],2
         # CONFIDENCE_2_TO_4
         for t in regex_dictio:
             regex=regex_dictio[t].replace(r"(\D+|$)","")+r"(?=(_|\s|-)?(ip|chip|crosslinked|protein\schip|sonication_ip|chromatin\simmuno))"
