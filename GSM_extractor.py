@@ -71,7 +71,7 @@ def main():
 #This function checks and correct the library strategy field if needed
 def check_assay(STRATEGY,attributes,title,study):
     info=" - ".join([attributes,title,study])
-    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","FAIRE-SEQ":"FAIRE","MNASE-SEQ":"MNASE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
+    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
     for name in names:
         if re.search(names[name],info.upper())!=None:
             STRATEGY=name
@@ -223,16 +223,15 @@ def process_line(regex_dictio,line):
         flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
         joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
         if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or line["LIB_STRAT"].lower()=="other":
-            strat=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
-            if any(x in strat.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]):
+            line["LIB_STRAT"]=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
+            if any(x in line["LIB_STRAT"].lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]):
                 target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
                 if confidence==0:
                     target,confidence=search_target(regex_dictio,line["ATTRIBUTES"],line["SAMPLE_TITLE"],flags)
                     strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
             else:
-                line["LIB_STRAT"]=strat
                 confidence=0
-                target=strat
+                target=line["LIB_STRAT"]
         else:
             target=line["LIB_STRAT"]
             confidence=0
