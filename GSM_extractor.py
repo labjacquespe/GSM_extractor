@@ -5,7 +5,7 @@ SCRIPT: GSM_extractor.py
     It also search the targeted protein for some type of experiments like ChIP-Seq.
 USAGE:
     python3 GSM_extractor.py processes path
-    -processes: Integer indicating the number of paralell process to create. Default is 4.
+    -processes: Integer indicating the number of paralell process to create.
     -path: Path to the directory containing the xml files. If you need to download the XML files, the path should be the word "online"
 Examples:
     python3 GSM_extractor 12 xml/
@@ -60,8 +60,8 @@ def main():
             pool=Pool(processes=cores)
             func = partial(get_line,regex_dictio,True) 
             results=pool.map(func,files)
-    for line in results:
-        print(line)
+
+    print(*results, sep='\n')
 
 
 """ ###############################################################################
@@ -155,6 +155,7 @@ def return_best_list(list_of_lists):
 
 #This function search for the target and fill different lists according to the confidence level of the research algorithms used"
 def search_target(regex_dictio,attributes,title,flags):
+    #if "Cut-and-Run_H2A" in title:
     lvl1_1,lvl1_2,lvl1_3,lvl2,lvl3,lvl4,lvl5=[],[],[],[],[],[],[]
     # CONFIDENCE_1
     if "1st ip:" in attributes.lower():
@@ -167,6 +168,7 @@ def search_target(regex_dictio,attributes,title,flags):
             hits.append("input")
         return "/".join(hits),1
     for att in attributes.lower().split(" | "):
+        att=custom_fixes(att)
         if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             flagged1=flagged2=[]
             for f in flags:
@@ -185,6 +187,7 @@ def search_target(regex_dictio,attributes,title,flags):
     else:
         for att in attributes.lower().split(" | "):
             if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
+                att=custom_fixes(att)
                 source_hits=search_all_targets(regex_dictio,att)
                 if len(source_hits)==1:
                     return source_hits[0],2
@@ -192,11 +195,11 @@ def search_target(regex_dictio,attributes,title,flags):
         for t in regex_dictio:
             regex=regex_dictio[t].replace(r"(\D+|$)","")+r"(?=(_|\s|-)?(ip|chip|crosslinked|protein\schip|sonication_ip|chromatin\simmuno))"
             if re.search(regex,title.lower()):
-                lvl2.append(t)
-            if re.search(regex_dictio[t],title.lower()):
                 lvl3.append(t)
-        lvl3=rm_deltas(regex_dictio,lvl2,title)
-        lvl4=rm_deltas(regex_dictio,lvl3,title)
+            if re.search(regex_dictio[t],title.lower()):
+                lvl4.append(t)
+        lvl3=rm_deltas(regex_dictio,lvl3,custom_fixes(title.lower()))
+        lvl4=rm_deltas(regex_dictio,lvl4,custom_fixes(title.lower()))
         lvl5=get_flagged(regex_dictio,title,flags)
         lower_conf=[lvl3,lvl4,lvl5]
         for i in range(len(lower_conf)):
@@ -210,10 +213,15 @@ def rm_deltas(regex_dictio,target_list,field):
     new=[]
     for t in target_list:
         regex=r'((∆|d|d\(|delta|del)+(-|_)?'+regex_dictio[t]+'|'+regex_dictio[t].replace(r"(\D+|$)","")+r'-?(δ|\stail\sdelete|del|\{delta\}|∆|aa|d|-(\s|_|$)))'
-        if re.search(regex,field.lower())==None:
+        if not re.search(regex,field.lower()):
             new.append(t)
     return new
 
+def custom_fixes(field):
+    terms=["red1 chip","jhd2_chip_seq_yar","wt_chip_seq_yar","yng2-wa"]
+    for term in terms:
+        field=field.lower().replace(term,"")
+    return field
 
 # Process line according to the library strategy
 def process_line(regex_dictio,line):
