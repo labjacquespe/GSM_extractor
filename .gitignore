@@ -6,3 +6,4 @@ xml_directory/*
 targets.txt
 all_xml/*
 make_re.py
+elegans/*
