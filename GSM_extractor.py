@@ -31,38 +31,39 @@ from Bio import Entrez
 """
 def main():
     # Read arguments
-    regex_dictio=get_dict("saccharomyces_cerevisiae")
-    args=read_config()
     try:
         cores=int(sys.argv[1])
         path=sys.argv[2]
+        orgs=sys.argv[3:]
     except:
         print_help()
-    ### ONLINE MODE ###
-    if path=="online":
-        clear_outdir("xml_directory")
-        Entrez.email = args["Entrez_email"]
-        xml_out=args["xml_out"]
-        for org in args["Organisms"].split(","):
-            query=build_query(args,org)
-            print(query)
-            results=online_mode(regex_dictio,query,cores,xml_out)
-            #pool=Pool(processes=min(cores,len(years)))
-            #func=partial(pool_query,regex_dictio,args,org,cores,xml_out)
-            #pool.map(func,years)
+    print(orgs)
+    """
+    for org in orgs:
+        regex_dictio=get_dict(org)
+        args=read_config()
+        ### ONLINE MODE ###
+        if path=="online":
+            clear_outdir("xml_directory")
+            Entrez.email = args["Entrez_email"]
+            xml_out=args["xml_out"]
+            for org in args["Organisms"].split(","):
+                query=build_query(args,org)
+                print(query)
+                results=online_mode(regex_dictio,query,cores,xml_out)
+                #pool=Pool(processes=min(cores,len(years)))
+    
+        ### LOCAL MODE ###
+        else:
+            path=path.rstrip("/")
+            for root, dirs, files in os.walk(path):
+                files=["{}/{}".format(path,filename) for filename in files]
+                pool=Pool(processes=cores)
+                func = partial(get_line,regex_dictio,True) 
+                results=pool.map(func,files)
 
-                
-    ### LOCAL MODE ###
-    else:
-        path=path.rstrip("/")
-        for root, dirs, files in os.walk(path):
-            files=["{}/{}".format(path,filename) for filename in files]
-            pool=Pool(processes=cores)
-            func = partial(get_line,regex_dictio,True) 
-            results=pool.map(func,files)
-
-    print(*results, sep='\n')
-
+        print(*results, sep='\n')
+        """
 
 """ ###############################################################################
     #                     METADATA PROCESSING MODULES                             #
@@ -276,14 +277,14 @@ def get_dict(org):
     org_dictio={}
     common_dictio={}
     lines=[]
-    f=org+".dict"
+    f="dictios/{}.dict".format(org)
     with open(f,"r") as f:
         lines=f.readlines()
     for line in lines:
         if line!="\n" and line!="":
             line=line.rstrip("\n").split(",")
             org_dictio[line[0]]=line[1]
-    with open("common.dict","r") as f:
+    with open("dictios/common.dict","r") as f:
         lines=f.readlines()
     for line in lines:
         if line!="\n" and line!="":
