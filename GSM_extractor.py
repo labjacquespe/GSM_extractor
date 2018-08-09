@@ -37,21 +37,18 @@ def main():
         orgs=sys.argv[3:]
     except:
         print_help()
-    print(orgs)
-    """
     for org in orgs:
+        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans"}
         regex_dictio=get_dict(org)
         args=read_config()
         ### ONLINE MODE ###
         if path=="online":
-            clear_outdir("xml_directory")
-            Entrez.email = args["Entrez_email"]
             xml_out=args["xml_out"]
-            for org in args["Organisms"].split(","):
-                query=build_query(args,org)
-                print(query)
-                results=online_mode(regex_dictio,query,cores,xml_out)
-                #pool=Pool(processes=min(cores,len(years)))
+            clear_outdir(xml_out)
+            Entrez.email = args["Entrez_email"]
+            query=build_query(args,full_name[org])
+            results=online_mode(regex_dictio,query,cores,xml_out)
+            #pool=Pool(processes=min(cores,len(years)))
     
         ### LOCAL MODE ###
         else:
@@ -63,7 +60,6 @@ def main():
                 results=pool.map(func,files)
 
         print(*results, sep='\n')
-        """
 
 """ ###############################################################################
     #                     METADATA PROCESSING MODULES                             #
@@ -206,7 +202,11 @@ def search_target(regex_dictio,attributes,title,flags):
         for i in range(len(lower_conf)):
             if len(list(set(lower_conf[i])))==1:
                 return lower_conf[i][0],i+2
-    return "not_found",0
+    lvl6=" & ".join(lvl4)
+    if lvl6:
+        return lvl6,6
+    else:
+        return "not_found",0
 
 
 # checks if the targets in a given list match a deletion patern. Returns a list of the targets that do not match in any patterns.
