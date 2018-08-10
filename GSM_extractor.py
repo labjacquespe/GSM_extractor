@@ -202,6 +202,14 @@ def search_target(regex_dictio,attributes,title,flags):
         for i in range(len(lower_conf)):
             if len(list(set(lower_conf[i])))==1:
                 return lower_conf[i][0],i+2
+    if len(lvl4)>1 and "strain:" in attributes:
+        for att in attributes.lower().split(" | "):
+            if "strain:" in att:
+                for t in lvl4:
+                    if re.search(regex_dictio[t],att):
+                        lvl4.remove(t)
+        if len(lvl4)==1:
+            return lvl4[0],4
     lvl6=" & ".join(lvl4)
     if lvl6:
         return lvl6,6
