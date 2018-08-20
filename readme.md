@@ -5,7 +5,7 @@
 
 **USAGE:**<br>
   * *python3 GSM_extractor.py processes path organism*<br>
-  * processes: Integer indicating the number of paralell process to create. Default is 4.<br>
+  * processes: Integer indicating the number of paralell process to create.<br>
   * path: Path to the directory containing the xml files. If you need to download the XML files, the path should be the word "online". The script will get the xml files from the SRA database by sending Entrez queries using the info specified in the config.ini file.<br>
   * Organism: The alias of the organism you are analysing. This argument is used to load the corresponding gene names dictionary. Currently, you can use saccer, elegans and human.
 
