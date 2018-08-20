@@ -38,7 +38,7 @@ def main():
     except:
         print_help()
     for org in orgs:
-        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans"}
+        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans","human":"homo_sapiens"}
         regex_dictio=get_dict(org)
         args=read_config()
         ### ONLINE MODE ###
