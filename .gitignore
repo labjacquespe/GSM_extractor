@@ -4,3 +4,6 @@ xml/*
 xml_directory/*
 *.ignore
 targets.txt
+all_xml/*
+make_re.py
+elegans/*
