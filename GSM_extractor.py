@@ -68,7 +68,7 @@ def main():
 #This function checks and correct the library strategy field if needed
 def check_assay(STRATEGY,attributes,title,study):
     info=" - ".join([attributes,title,study])
-    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
+    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
     for name in names:
         if re.search(names[name],info.upper())!=None:
             STRATEGY=name
@@ -89,7 +89,7 @@ def check_if_input(title,attributes):
             if any(x in att for x in ["input","mock","wce","control","igg","_in_","wce","whole cell extract"]):
                 target="INPUT"
                 confidence=5
-    if re.search(r"(input|_in_|wce|whole\scell\sextract|mock|control|untagged)",title.lower())!=None:
+    if re.search(r"(input|_in_|wce|whole\scell\sextract|mock|control|untagged|igg-ip)",title.lower())!=None:
         target="INPUT"
         confidence=3
     return target,confidence
