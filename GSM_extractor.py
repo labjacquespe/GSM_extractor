@@ -31,6 +31,7 @@ from Bio import Entrez
 """
 def main():
     # Read arguments
+
     try:
         cores=int(sys.argv[1])
         path=sys.argv[2]
@@ -46,8 +47,10 @@ def main():
             xml_out=args["xml_out"]
             clear_outdir(xml_out)
             Entrez.email = args["Entrez_email"]
-            query=build_query(args,full_name[org])
-            results=online_mode(regex_dictio,query,cores,xml_out)
+            GSM_list=[]
+            with open("GSM_list.txt", "r") as gsmlist:
+                GSM_list=gsmlist.readlines()
+            online_mode(regex_dictio,GSM_list,cores,xml_out)
             #pool=Pool(processes=min(cores,len(years)))
     
         ### LOCAL MODE ###
@@ -115,8 +118,9 @@ def get_flagged(regex_dictio,field,flags):
 
 # extract pertinent info from a given xml file
 def get_line(regex_dictio,local,file):
+    GSM=file.split("/")[-1].rstrip(".xml")
     line=read_xml.fields(file,local)
-    return process_line(regex_dictio,line)
+    return process_line(regex_dictio,line,GSM)
 
 def get_strain(attributes,title):
     strain=""
@@ -150,22 +154,33 @@ def return_best_list(list_of_lists):
             return l
     return []
 
+def confidence1_only(regex_dictio,attributes,title,flags):
+    lvl1_1,lvl1_2,lvl1_3=[],[],[]
+    for att in attributes.lower().split(" | "):
+        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
+            flagged1=flagged2=[]
+            for f in flags:
+                if re.search(flags[f],att):
+                    flagged1+=re.findall(flags[f],attributes.lower())
+                if re.search(flags[f],title.lower()):
+                    flagged2+=re.findall(flags[f],title.lower())
+            for t in regex_dictio:
+                lvl1_1+=search_this_target(regex_dictio,att,t)
+                lvl1_2+=search_this_target(regex_dictio,flagged1,t)
+                lvl1_3+=search_this_target(regex_dictio,flagged2,t)
+        lvl1=return_best_list([lvl1_1,lvl1_2,lvl1_3])
+    #print(lvl1,"\n\n")
+    if lvl1:
+        return lvl1[0],1
+    else:
+        return "not_found",0
+
 #This function search for the target and fill different lists according to the confidence level of the research algorithms used"
 def search_target(regex_dictio,attributes,title,flags):
     #if "Cut-and-Run_H2A" in title:
     lvl1_1,lvl1_2,lvl1_3,lvl2,lvl3,lvl4,lvl5=[],[],[],[],[],[],[]
     # CONFIDENCE_1
-    if "1st ip:" in attributes.lower():
-        hits=[]
-        pair=" ".join(title.split("-")[1:])
-        for t in regex_dictio:
-            if re.search(regex_dictio[t],pair.lower()):
-                hits.append(t)
-        if "input" in pair.lower():
-            hits.append("input")
-        return "/".join(hits),1
     for att in attributes.lower().split(" | "):
-        att=custom_fixes(att)
         if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             flagged1=flagged2=[]
             for f in flags:
@@ -184,7 +199,6 @@ def search_target(regex_dictio,attributes,title,flags):
     else:
         for att in attributes.lower().split(" | "):
             if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
-                att=custom_fixes(att)
                 source_hits=search_all_targets(regex_dictio,att)
                 if len(source_hits)==1:
                     return source_hits[0],2
@@ -195,8 +209,8 @@ def search_target(regex_dictio,attributes,title,flags):
                 lvl3.append(t)
             if re.search(regex_dictio[t],title.lower()):
                 lvl4.append(t)
-        lvl3=rm_deltas(regex_dictio,lvl3,custom_fixes(title.lower()))
-        lvl4=rm_deltas(regex_dictio,lvl4,custom_fixes(title.lower()))
+        lvl3=rm_deltas(regex_dictio,lvl3,title.lower())
+        lvl4=rm_deltas(regex_dictio,lvl4,title.lower())
         lvl5=get_flagged(regex_dictio,title,flags)
         lower_conf=[lvl3,lvl4,lvl5]
         for i in range(len(lower_conf)):
@@ -221,7 +235,7 @@ def search_target(regex_dictio,attributes,title,flags):
 def rm_deltas(regex_dictio,target_list,field):
     new=[]
     for t in target_list:
-        regex=r'((∆|d|d\(|delta|del)+(-|_)?'+regex_dictio[t]+'|'+regex_dictio[t].replace(r"(\D+|$)","")+r'-?(δ|\stail\sdelete|del|\{delta\}|∆|aa|d|-(\s|_|$)))'
+        regex=r'((∆|d|d\(|delta|del)+(-|_)?'+regex_dictio[t]+'|'+regex_dictio[t].replace(r"(\D+|$)","")+r'-?(-as|δ|\stail\sdelete|del|\{delta\}|∆|aa|d|-(\s|_|$)))'
         if not re.search(regex,field.lower()):
             new.append(t)
     return new
@@ -233,26 +247,43 @@ def custom_fixes(field):
     return field
 
 # Process line according to the library strategy
-def process_line(regex_dictio,line):
+def process_line(regex_dictio,line,GSM):
     strain=""
-    GSM=get_GSM(line)
     if GSM:
         flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
         joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
         if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or line["LIB_STRAT"].lower()=="other":
             line["LIB_STRAT"]=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
-            if any(x in line["LIB_STRAT"].lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]):
+            if line["LIB_STRAT"].lower()=="mnase-seq":
                 target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
                 if confidence==0:
-                    target,confidence=search_target(regex_dictio,line["ATTRIBUTES"],line["SAMPLE_TITLE"],flags)
+                    target,confidence=confidence1_only(regex_dictio,custom_fixes(line["ATTRIBUTES"]),custom_fixes(line["SAMPLE_TITLE"]),flags)
                     strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
+
+            elif any(x in line["LIB_STRAT"].lower() for x in ["chip-seq","chip-exo","chec-seq","cut-and-run", "brdu"]):
+                if "1st ip:" in line["ATTRIBUTES"].lower():
+                    hits=[]
+                    info=line["SAMPLE_TITLE"].split("-")
+                    pair=" ".join(info[1:])
+                    strain=" ".join(info[0])
+                    for t in regex_dictio:
+                        if re.search(regex_dictio[t],pair.lower()):
+                            hits.append(t)
+                    if "input" in pair.lower():
+                        hits.append("input")
+                    target,confidence="/".join(hits),1
+                else:
+                    target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
+                    if confidence==0:
+                        target,confidence=search_target(regex_dictio,custom_fixes(line["ATTRIBUTES"]),custom_fixes(line["SAMPLE_TITLE"]),flags)
+                        strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
             else:
                 confidence=0
                 target=line["LIB_STRAT"]
         else:
             target=line["LIB_STRAT"]
             confidence=0
-        if line["LIB_STRAT"].lower()=="mnase-seq" and confidence in [0,5]:
+        if line["LIB_STRAT"].lower()=="mnase-seq" and confidence in [0,6]:
             target="mnase-seq"
         line["STRAIN"]=strain
         return "\t".join([GSM,line["LIB_STRAT"],str(confidence),target])
@@ -261,9 +292,7 @@ def get_GSM(line):
     fields=[line['LIB_NAME'],line['SAMPLE_NAME'],line['SAMPLE_TITLE']," - ".join(line)]
     for field in fields:
         GSM=list(set(re.findall("GSM[0-9]+",field)))
-        if len(GSM)==1:
-            return GSM[0]
-    return None
+    return " | ".join(GSM)
 
 
 
@@ -359,6 +388,7 @@ def build_query(args, org):
     query+=" AND {}[PDAT]".format(args['Date_range'])
     if "Custom" in args:
         query+=" "+args['Custom']
+    print(query)
     return query
 
 
@@ -378,7 +408,7 @@ def efetch(regex_dictio,xml_out,ID):
             filename=temp
         with open(filename,"w") as f:
             f.write("".join(sample))
-        return get_line(regex_dictio,False,sample)
+        #return get_line(regex_dictio,False,sample)
 
 # Send esearch query and return the resulting dictionary (containing the count, id of the samples etc...)
 def get_sra_handle(query, database):
@@ -387,18 +417,18 @@ def get_sra_handle(query, database):
     return dic
 
 # Process queries generated by build_query
-def online_mode(regex_dictio,query,cores,xml_out):
-    results=[]
+def online_mode(regex_dictio,GSM_list,cores,xml_out):
+    GSM_list=" OR ".join([x.rstrip("\n") for x in GSM_list])
     #Ajusting the month range if the user specified it
-    esearch_dic=get_sra_handle(query, "sra")
+    esearch_dic=get_sra_handle(GSM_list, "sra")
+    print(esearch_dic["Count"])
     if int(esearch_dic["Count"])<cores:
         cores=int(esearch_dic["Count"])
     if str(esearch_dic["Count"])!="0":
         if esearch_dic['IdList']:
             pool=Pool(processes=cores)
             func=partial(efetch,regex_dictio,xml_out)
-            results=pool.map(func,esearch_dic['IdList'])
-    return results
+            pool.map(func,esearch_dic['IdList'])
 
 #def pool_query(regex_dictio,args,org,cores,xml_out,year):
 #    query_list=build_query(args, org, str(year))
