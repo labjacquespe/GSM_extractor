@@ -7,3 +7,14 @@ targets.txt
 all_xml/*
 make_re.py
 elegans/*
+arabidopsis/
+chicken/
+chimp/
+download_all.sh
+file.txt
+fly/
+mouse/
+pombe/
+rat/
+saccer/
+zebrafish/

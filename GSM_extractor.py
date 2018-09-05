@@ -39,25 +39,17 @@ def main():
     except:
         print_help()
     for org in orgs:
-        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans","human":"homo_sapiens"}
-        regex_dictio=get_dict(org)
+        alias=org
+        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans","human":"homo_sapiens","mouse":"mus_musculus","arabidopsis":"arabidopsis_thaliana","zebrafish":"danio_rerio","fly":"drosophila_melanogaster","chicken":"gallus_gallus","chimp":"pan_troglodytes","rat":"rattus_norvegicus","pombe":"schizosaccharomyces pombe"}
+        #regex_dictio=get_dict(org)
         args=read_config()
+
         ### ONLINE MODE ###
         if path=="online":
             path=args["xml_out"]
-            print ('@INFO: Entering online mode, processing ',org, file=sys.stderr)
-            str_list=[]
-            clear_outdir(args["xml_out"])
-            Entrez.email = args["Entrez_email"]
-            query=build_query(args,full_name[org])
-            print ('@INFO: query:',query, file=sys.stderr)
-            dic_query=get_sra_handle(query,"gds")
-            func=partial(efetch,regex_dictio,args["xml_out"])
-            online_pool=Pool(processes=cores)
-            results=online_pool.map(func,dic_query['IdList'])
-            print ('@INFO: Online mode ended.', file=sys.stderr)
-
-        ### LOCAL MODE ###
+            #clear_outdir(args["xml_out"])
+            get_files(full_name[org],args,cores,alias)
+        """
         print ('@INFO: Extracting metadata from xml files...', file=sys.stderr)
         path=path.rstrip("/")
         for root, dirs, files in os.walk(path):
@@ -67,6 +59,26 @@ def main():
             results=pool.map(func,files)
 
         print(*results, sep='\n')
+        print ('@INFO: Done!', file=sys.stderr)"""
+        
+
+def get_GSM(GSE):
+    GSM_list=[]
+    if GSE.startswith("20"):
+        GSE="GSE"+GSE.lstrip("2").lstrip("0")
+        completed=False
+        while not completed:
+            #Avoid esearch XML reading error
+            try:
+                GSM_handle=get_sra_handle(GSE,"gds")
+                completed=True
+            except:
+                pass
+        for GSM in GSM_handle['IdList']:
+            if GSM.startswith("30"):
+                GSM="GSM"+GSM.lstrip("3").lstrip("0")
+                GSM_list.append(GSM)
+    return(GSM_list)
 
 
 """ ###############################################################################
@@ -253,6 +265,7 @@ def custom_fixes(field):
 
 # Process line according to the library strategy
 def process_line(regex_dictio,line,GSM):
+    GSM=get_GEO_ID(line)
     strain=""
     if GSM:
         flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
@@ -293,12 +306,9 @@ def process_line(regex_dictio,line,GSM):
         line["STRAIN"]=strain
         return "\t".join([GSM,line["LIB_STRAT"],str(confidence),target])
 
-"""
-def get_GSM(line):
-    fields=[line['LIB_NAME'],line['SAMPLE_NAME'],line['SAMPLE_TITLE']," - ".join(line)]
-    for field in fields:
-        GSM=list(set(re.findall("GSM[0-9]+",field)))
-    return " | ".join(GSM)"""
+def get_GEO_ID(line):
+    GSM=list(set(re.findall("GSM[0-9]+",line["SAMPLE_NAME"])))
+    return " | ".join(GSM)
 
 
 
@@ -398,28 +408,61 @@ def build_query(args, org):
 
 
 # Dowload and process the given xml file
-def efetch(regex_dictio,xml_out,ID):
-    ID=ID[2:]
-    GSM="GSM"+ID
-    sample=Entrez.efetch(db="sra", id=ID, format="native").readlines()
-    if "is not public" in "".join(sample):
-        return
-    filename="{}/{}.xml".format(xml_out,GSM)
-    if os.path.isfile(filename):
-        number=2
-        temp=filename
-        while os.path.isfile(temp):
-            temp="{}_{}.xml".format(filename.rstrip(".xml"),number)
-            number+=1
-        filename=temp
-    with open(filename,"w") as f:
-        f.write("".join(sample))
+def efetch(xml_out,ID):
+    completed=False
+    while not completed:
+        #avoid multiprocess error "cannot serialize '_io.BufferedReader' object"
+        try:
+            sample=Entrez.efetch(db="sra", id=ID, format="native").readlines()
+            filename="{}/{}.xml".format(xml_out,ID)
+            with open(filename,"w") as f:
+                f.write("".join(sample))
+            completed=True
+        except:
+            pass
+            
+            print ('@ERROR: Multiprocessing error, retrying...', file=sys.stderr)
 
 # Send esearch query and return the resulting dictionary (containing the count, id of the samples etc...)
 def get_sra_handle(query, database):
     handle = Entrez.esearch(db=database,retmax=1000000, term=query)
     dic=Entrez.read(handle)
     return dic
+
+def get_files(org,args,cores,alias):
+    already_there=[]
+    for root, dirs, files in os.walk(alias):
+        for name in files:
+            path=alias+"/"+name
+            if os.stat(path).st_size>0:
+                already_there.append(name.rstrip(".xml)"))
+
+    query=""
+    print ('@INFO: Entering online mode, processing ',org, file=sys.stderr)
+    str_list=[]
+    Entrez.email = args["Entrez_email"]
+    query=build_query(args,org)
+    print ('@INFO: Query:',query, file=sys.stderr)
+    print ('@INFO: Collecting the GEO series...', file=sys.stderr)
+    GSE_handle=get_sra_handle(query,"gds")
+    GSE_pool=Pool(processes=cores)
+    print ('@INFO: Collecting the GEO sample IDs...', file=sys.stderr)
+    l=GSE_pool.map(get_GSM,list(GSE_handle['IdList']))
+    GSE_pool.close()
+    GSM_list = [str(item) for sublist in l for item in sublist]
+    print ('@INFO: Associating the GSM ID with the SRA ID...', file=sys.stderr)
+    chunks = [GSM_list[x:x+5000] for x in range(0, len(GSM_list), 5000)]
+    print ('@INFO: Downloading xml files from the SRA database...', file=sys.stderr)
+    for chunk in chunks:
+        SRA_handle=get_sra_handle(" OR ".join(chunk),"sra")
+        ID_list=list(set(SRA_handle['IdList']))
+        for n in already_there:
+            if n in ID_list:
+                ID_list.remove(n)
+        online_pool=Pool(processes=cores)
+        func=partial(efetch,args["xml_out"])
+        online_pool.map(func,ID_list)
+        online_pool.close()
 
 
 
