@@ -16,12 +16,14 @@ NOTE: To use the online mode, please fill the config.ini files that contains the
 import os
 import sys
 from multiprocessing import Pool
-import read_xml
+import extract_xml
 import re
 from collections import OrderedDict
 from functools import partial
 from Bio import Entrez
-
+import urllib.request
+import tarfile
+import xml.etree.ElementTree as ET
 
 
 
@@ -29,70 +31,115 @@ from Bio import Entrez
     #                               MAIN FUNCTION                                 #
     ###############################################################################
 """
+
 def main():
     # Read arguments
-
+    lines=[]
+    to_process=[]
     try:
+        args=read_config()
         cores=int(sys.argv[1])
         path=sys.argv[2]
-        orgs=sys.argv[3:]
     except:
         print_help()
-    for org in orgs:
-        alias=org
-        full_name={"saccer":"saccharomyces_cerevisiae","elegans":"caenorhabditis_elegans","human":"homo_sapiens","mouse":"mus_musculus","arabidopsis":"arabidopsis_thaliana","zebrafish":"danio_rerio","fly":"drosophila_melanogaster","chicken":"gallus_gallus","chimp":"pan_troglodytes","rat":"rattus_norvegicus","pombe":"schizosaccharomyces pombe"}
-        #regex_dictio=get_dict(org)
-        args=read_config()
+    if path=="online":
+        print("INFO: Online mode selected, downloading files...", file=sys.stderr)
+        try:
+            orgs=args["Organisms"].rstrip("\n").split(",")
+        except:
+            print("ERROR: Organisms not specified in congig.ini file.", file=sys.stderr)
+            quit()
+        path=args["xml_out"]
+        for org in orgs:        
+            get_files(org,args,cores)
+        print("INFO: --> Files downloaded succesfully.", file=sys.stderr)
 
-        ### ONLINE MODE ###
-        if path=="online":
-            path=args["xml_out"]
-            #clear_outdir(args["xml_out"])
-            get_files(full_name[org],args,cores,alias)
-        """
-        print ('@INFO: Extracting metadata from xml files...', file=sys.stderr)
-        path=path.rstrip("/")
+    if os.path.isdir(path):
+        print("INFO: Extracting samples from the GSE xml files...", file=sys.stderr)
         for root, dirs, files in os.walk(path):
-            files=["{}/{}".format(path,filename) for filename in files]
-            pool=Pool(processes=cores)
-            func = partial(get_line,regex_dictio,True) 
-            results=pool.map(func,files)
+            files=["{}/{}".format(path.rstrip("/"),filename) for filename in files]
+            tsv_pool=Pool(processes=cores)
+            list_of_lists_of_lines=tsv_pool.map(extract_xml.get_metadata,files)
+            lines = [item for sublist in list_of_lists_of_lines for item in sublist]
+            tsv_pool.close()
+        print("INFO: --> Samples extracted succesfully.", file=sys.stderr)
+        if "Create_tsv" in args and args["Create_tsv"].lower()=="true":
+            print("INFO: Creating tsv file...", file=sys.stderr)
+            with open("GSM_extractor_out.tsv","w") as outf:
+                outf.write("\n".join(lines))
+            print("INFO: --> Tsv file created.", file=sys.stderr)
+    elif os.path.isfile(path):
+        print("INFO: Reading lines from tsv file", file=sys.stderr)
+        with open(path, "r") as inf:
+            lines=inf.readlines()
+            lines=[x.rstrip("\n") for x in lines]
 
-        print(*results, sep='\n')
-        print ('@INFO: Done!', file=sys.stderr)"""
-        
-
-def get_GSM(GSE):
-    GSM_list=[]
-    if GSE.startswith("20"):
-        GSE="GSE"+GSE.lstrip("2").lstrip("0")
-        completed=False
-        while not completed:
-            #Avoid esearch XML reading error
-            try:
-                GSM_handle=get_sra_handle(GSE,"gds")
-                completed=True
-            except:
-                pass
-        for GSM in GSM_handle['IdList']:
-            if GSM.startswith("30"):
-                GSM="GSM"+GSM.lstrip("3").lstrip("0")
-                GSM_list.append(GSM)
-    return(GSM_list)
+    print("INFO: Processing lines to find targeted proteins...", file=sys.stderr)
+    process_pool=Pool(processes=cores)
+    results=process_pool.map(process_line,lines)
+    print(*results, sep='\n')
+    print ('@INFO: Done!', file=sys.stderr)
 
 
-""" ###############################################################################
+###############################################################################
     #                     METADATA PROCESSING MODULES                             #
-    ###############################################################################
-"""
+###############################################################################
+
+def process_line(line):
+    line=line.rstrip("\n").split("\t")
+    regex_dictio=get_dict(line[3].replace(" ","_").lower())
+    #[corrected_GSM,GSE,GPL,organism,library_strategy,sample_title," | ".join(attributes),sample_source,molecule,platform_technology,library_source,library_selection,series_title,series_sumary,series_design,contributor,organization,release_date,submission_date]
+    organism=line[3].lower()
+    strategy=line[4].lower()
+    sample_title=line[5].lower()
+    attributes=line[6].lower()
+    flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
+    joined=strategy+sample_title+attributes
+    if any (x in joined for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or strategy=="other":
+        strategy=check_assay(joined, strategy)
+        if any(x in strategy.lower() for x in ["chip-seq","chip-exo","chec-seq","cut-and-run"]):
+            if "1st ip:" in attributes:
+                target,confidence=custom_case1(regex_dictio,sample_title)
+            else:
+                target,confidence=check_if_input(sample_title,attributes)
+                if confidence==0:
+                    target,confidence=search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),flags)
+
+        elif strategy=="mnase-seq":
+            target,confidence=confidence1_only(regex_dictio,remove_term(attributes),remove_term(sample_title),flags)
+            if confidence==0:
+                target="mnase-seq"
+        else:
+            target,confidence=strategy,0
+    else:
+        target,confidence=strategy,0
+    #print("\t".join([line[0],organism,strategy,target,str(confidence)]))
+    return "\t".join([line[0],strategy,organism,str(confidence),target])
+    
+
+def custom_case1(regex_dictio,sample_title):
+    #custom case for samples with "1st ip" and "2nd ip" attributes
+    hits=[]
+    info=sample_title.split("-")
+    pair=info[1:]
+    for n in pair:
+        for t in regex_dictio:
+            if re.search(regex_dictio[t],n.lower()):
+                hits.append(t)
+    if "input" in str(pair).lower():
+        hits.append("input")
+    if len(hits)==1:
+        hits.append(hits[0])
+    return "/".join(hits),1
+
+
 #This function checks and correct the library strategy field if needed
-def check_assay(STRATEGY,attributes,title,study):
-    info=" - ".join([attributes,title,study])
-    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
+def check_assay(info,strategy):
+    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU-SEQ":"BRDU-?SEQ","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
     for name in names:
         if re.search(names[name],info.upper())!=None:
-            STRATEGY=name
-    return STRATEGY
+            strategy=name
+    return strategy.lower()
 
 
 #This function checks it a control term is found within the sample title and attributes
@@ -257,54 +304,11 @@ def rm_deltas(regex_dictio,target_list,field):
             new.append(t)
     return new
 
-def custom_fixes(field):
+def remove_term(field):
     terms=["red1 chip","jhd2_chip_seq_yar","wt_chip_seq_yar","yng2-wa"]
     for term in terms:
         field=field.lower().replace(term,"")
     return field
-
-# Process line according to the library strategy
-def process_line(regex_dictio,line,GSM):
-    GSM=get_GEO_ID(line)
-    strain=""
-    if GSM:
-        flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
-        joined=" - ".join([line["SAMPLE_NAME"],line["SAMPLE_TITLE"],line["EXP_TITLE"],line["ATTRIBUTES"],line["STUDY_TITLE"],line["LIB_STRAT"]])
-        if any(x in joined.lower() for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or line["LIB_STRAT"].lower()=="other":
-            line["LIB_STRAT"]=check_assay(line["LIB_STRAT"],line["ATTRIBUTES"],line["SAMPLE_TITLE"],line['STUDY_TITLE'])
-            if line["LIB_STRAT"].lower()=="mnase-seq":
-                target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
-                if confidence==0:
-                    target,confidence=confidence1_only(regex_dictio,custom_fixes(line["ATTRIBUTES"]),custom_fixes(line["SAMPLE_TITLE"]),flags)
-                    strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
-
-            elif any(x in line["LIB_STRAT"].lower() for x in ["chip-seq","chip-exo","chec-seq","cut-and-run", "brdu"]):
-                if "1st ip:" in line["ATTRIBUTES"].lower():
-                    hits=[]
-                    info=line["SAMPLE_TITLE"].split("-")
-                    pair=" ".join(info[1:])
-                    strain=" ".join(info[0])
-                    for t in regex_dictio:
-                        if re.search(regex_dictio[t],pair.lower()):
-                            hits.append(t)
-                    if "input" in pair.lower():
-                        hits.append("input")
-                    target,confidence="/".join(hits),1
-                else:
-                    target,confidence=check_if_input(line["SAMPLE_TITLE"],line["ATTRIBUTES"])
-                    if confidence==0:
-                        target,confidence=search_target(regex_dictio,custom_fixes(line["ATTRIBUTES"]),custom_fixes(line["SAMPLE_TITLE"]),flags)
-                        strain=get_strain(line["ATTRIBUTES"],line["SAMPLE_TITLE"])
-            else:
-                confidence=0
-                target=line["LIB_STRAT"]
-        else:
-            target=line["LIB_STRAT"]
-            confidence=0
-        if line["LIB_STRAT"].lower()=="mnase-seq" and confidence in [0,6]:
-            target="mnase-seq"
-        line["STRAIN"]=strain
-        return "\t".join([GSM,line["LIB_STRAT"],str(confidence),target])
 
 def get_GEO_ID(line):
     GSM=list(set(re.findall("GSM[0-9]+",line["SAMPLE_NAME"])))
@@ -347,6 +351,15 @@ def get_dict(org):
     targets.update(OrderedDict(common_dictio))
     return targets
 
+def get_common_dict():
+    common_dictio={}
+    with open("dictios/common.dict","r") as f:
+        lines=f.readlines()
+    for line in lines:
+        if line!="\n" and line!="":
+            line=line.rstrip("\n").split(",")
+            common_dictio[line[0]]=line[1]
+    return OrderedDict(common_dictio)
 
 def print_help():
     text="""SCRIPT: GSM_extractor.py
@@ -406,63 +419,58 @@ def build_query(args, org):
         query+=" "+args['Custom']
     return query
 
-
-# Dowload and process the given xml file
-def efetch(xml_out,ID):
-    completed=False
-    while not completed:
-        #avoid multiprocess error "cannot serialize '_io.BufferedReader' object"
-        try:
-            sample=Entrez.efetch(db="sra", id=ID, format="native").readlines()
-            filename="{}/{}.xml".format(xml_out,ID)
-            with open(filename,"w") as f:
-                f.write("".join(sample))
-            completed=True
-        except:
-            pass
-            
-            print ('@ERROR: Multiprocessing error, retrying...', file=sys.stderr)
-
 # Send esearch query and return the resulting dictionary (containing the count, id of the samples etc...)
-def get_sra_handle(query, database):
+def get_handle(query, database):
     handle = Entrez.esearch(db=database,retmax=1000000, term=query)
     dic=Entrez.read(handle)
     return dic
 
-def get_files(org,args,cores,alias):
+def get_files(org,args,cores):
+    outdir=args["xml_out"]
+    print ('@INFO: ---> Accounting for the xml already in the xnk_output folder...', file=sys.stderr)
     already_there=[]
-    for root, dirs, files in os.walk(alias):
+    for root, dirs, files in os.walk(outdir):
         for name in files:
-            path=alias+"/"+name
+            path=outdir+"/"+name
             if os.stat(path).st_size>0:
                 already_there.append(name.rstrip(".xml)"))
-
-    query=""
-    print ('@INFO: Entering online mode, processing ',org, file=sys.stderr)
-    str_list=[]
+    if len(already_there)>0:
+        print ('@INFO: ---> The xml for {} GSE are already in the output directory, they will not be downloaded again'.format(len(already_there)), file=sys.stderr)
+        print ('@INFO: ---> Fetching the remaining GSE IDs...', file=sys.stderr)
+    else:
+        print ('@INFO: ---> Fetching GSE IDs ...', file=sys.stderr)
     Entrez.email = args["Entrez_email"]
     query=build_query(args,org)
-    print ('@INFO: Query:',query, file=sys.stderr)
-    print ('@INFO: Collecting the GEO series...', file=sys.stderr)
-    GSE_handle=get_sra_handle(query,"gds")
-    GSE_pool=Pool(processes=cores)
-    print ('@INFO: Collecting the GEO sample IDs...', file=sys.stderr)
-    l=GSE_pool.map(get_GSM,list(GSE_handle['IdList']))
-    GSE_pool.close()
-    GSM_list = [str(item) for sublist in l for item in sublist]
-    print ('@INFO: Associating the GSM ID with the SRA ID...', file=sys.stderr)
-    chunks = [GSM_list[x:x+5000] for x in range(0, len(GSM_list), 5000)]
-    print ('@INFO: Downloading xml files from the SRA database...', file=sys.stderr)
-    for chunk in chunks:
-        SRA_handle=get_sra_handle(" OR ".join(chunk),"sra")
-        ID_list=list(set(SRA_handle['IdList']))
-        for n in already_there:
-            if n in ID_list:
-                ID_list.remove(n)
-        online_pool=Pool(processes=cores)
-        func=partial(efetch,args["xml_out"])
-        online_pool.map(func,ID_list)
-        online_pool.close()
+    GSE_handle=get_handle(query,"gds")
+    xml_links={}
+    for GSE in GSE_handle['IdList']:
+        GSE="GSE{}".format(GSE.lstrip("2").lstrip("0"))
+        if GSE not in already_there:
+            index=len(GSE)-3
+            two_firsts=GSE[3:index]
+            xml_links[GSE]="ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE{}{}/{}/miniml/{}_family.xml.tgz".format(two_firsts,"nnn",GSE,GSE)
+    print ('@INFO: ---> {} series found.'.format(len(xml_links)), file=sys.stderr)
+    print ('@INFO: ---> Downloading xml files ...', file=sys.stderr)
+    #for GSE in xml_links.keys():
+    download_pool=Pool(processes=cores)
+    func=partial(download_GSE,xml_links,outdir)
+    download_pool.map(func,list(xml_links.keys()))
+    download_pool.close()
+    print ('@INFO: ---> Done!\n', file=sys.stderr)
+
+def download_GSE(xml_links,outdir,GSE):
+    
+    path="{}/{}.xml.tar.gz".format(outdir,GSE)
+    urllib.request.urlretrieve(xml_links[GSE],path)
+    tar=tarfile.open(path)
+    content=""
+    for member in tar.getmembers():
+        if "family.xml" in str(member):
+            f=tar.extractfile(member)
+            content = f.read()
+            with open(path.rstrip(".tar.gz"),"wb") as outf:
+                outf.write(content)
+    os.remove(path)
 
 
 
