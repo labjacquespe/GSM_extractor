@@ -77,7 +77,7 @@ def main():
     print("INFO: Processing lines to find targeted proteins...", file=sys.stderr)
     process_pool=Pool(processes=cores)
     results=process_pool.map(process_line,lines)
-    print(*results, sep='\n')
+    print(*list(set(results)), sep='\n')
     print ('@INFO: Done!', file=sys.stderr)
 
 
@@ -86,14 +86,18 @@ def main():
 ###############################################################################
 
 def process_line(line):
+    
     line=line.rstrip("\n").split("\t")
-    regex_dictio=get_dict(line[3].replace(" ","_").lower())
+    #regex_dictio=get_dict(line[3].replace(" ","_").lower())
+    regex_dictio=get_common_dict()
     #[corrected_GSM,GSE,GPL,organism,library_strategy,sample_title," | ".join(attributes),sample_source,molecule,platform_technology,library_source,library_selection,series_title,series_sumary,series_design,contributor,organization,release_date,submission_date]
     organism=line[3].lower()
     strategy=line[4].lower()
     sample_title=line[5].lower()
     attributes=line[6].lower()
-    flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
+    source=line[7].lower()
+    flags={"FLAG":"-[0-9]*x?-?flag","MYC":"-[0-9]*x?-?myc|9e10","V5":"-[0-9]*x?-?v5","TAP":"-[0-9]*x?-?tap","HA":"-[0-9]*x?-?ha","GFP":"-[0-9]*x?-?e?gfp","T7":"-[0-9]*x?-?t7"}
+    #flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
     joined=strategy+sample_title+attributes
     if any (x in joined for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or strategy=="other":
         strategy=check_assay(joined, strategy)
@@ -103,12 +107,12 @@ def process_line(line):
             else:
                 target,confidence=check_if_input(sample_title,attributes)
                 if confidence==0:
-                    target,confidence=search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),flags)
+                    target,confidence=search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags)
 
-        elif strategy=="mnase-seq":
-            target,confidence=confidence1_only(regex_dictio,remove_term(attributes),remove_term(sample_title),flags)
+        elif strategy.lower() in ["mnase-seq", "other","brdu-seq"]:
+            target,confidence=confidence1_only(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags)
             if confidence==0:
-                target="mnase-seq"
+                target=strategy.lower()
         else:
             target,confidence=strategy,0
     else:
@@ -135,7 +139,7 @@ def custom_case1(regex_dictio,sample_title):
 
 #This function checks and correct the library strategy field if needed
 def check_assay(info,strategy):
-    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU-SEQ":"BRDU-?SEQ","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
+    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU-SEQ":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
     for name in names:
         if re.search(names[name],info.upper())!=None:
             strategy=name
@@ -172,19 +176,14 @@ def get_flagged(regex_dictio,field,flags):
     targets=[]
     for f in flags:
         if re.search(flags[f],str(field).lower()):
-            flagged=re.findall(flags[f],str(field).lower())
+            regex="[a-z0-9-]+(?={})".format(flags[f])
+            flagged=re.findall(regex,str(field).lower())
             if flagged:
                 for t in regex_dictio:
                     if re.search(regex_dictio[t], str(flagged)):
                         targets.append(t)
     return targets
 
-
-# extract pertinent info from a given xml file
-def get_line(regex_dictio,local,file):
-    GSM=file.split("/")[-1].rstrip(".xml")
-    line=read_xml.fields(file,local)
-    return process_line(regex_dictio,line,GSM)
 
 def get_strain(attributes,title):
     strain=""
@@ -201,7 +200,7 @@ def search_all_targets(regex_dictio,field):
         for t in regex_dictio:
             if re.search(regex_dictio[t], str(field).lower()):
                 hits.append(t)
-    return hits
+    return list(set(hits))
 
 
 #This function search for a given target in a given field
@@ -215,50 +214,64 @@ def search_this_target(regex_dictio,field,t):
 def return_best_list(list_of_lists):
     for l in list_of_lists:
         if len(list(set(l)))==1:
-            return l
+            return list(set(l))
     return []
 
-def confidence1_only(regex_dictio,attributes,title,flags):
-    lvl1_1,lvl1_2,lvl1_3=[],[],[]
+def confidence1_only(regex_dictio,attributes,title,source,flags):
+    attributes=" | ".join([attributes,source])
+    lvl1=[]
+    flags_found=[]
     for att in attributes.lower().split(" | "):
         if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
-            flagged1=flagged2=[]
-            for f in flags:
+            lvl1+=search_all_targets(regex_dictio,att)
+            for f in flags.keys():
                 if re.search(flags[f],att):
-                    flagged1+=re.findall(flags[f],attributes.lower())
-                if re.search(flags[f],title.lower()):
-                    flagged2+=re.findall(flags[f],title.lower())
-            for t in regex_dictio:
-                lvl1_1+=search_this_target(regex_dictio,att,t)
-                lvl1_2+=search_this_target(regex_dictio,flagged1,t)
-                lvl1_3+=search_this_target(regex_dictio,flagged2,t)
-        lvl1=return_best_list([lvl1_1,lvl1_2,lvl1_3])
-    #print(lvl1,"\n\n")
-    if lvl1:
+                    flags_found.append(f)
+    
+    if len(lvl1)==1:
+        return lvl1[0],1
+    elif flags_found:
+        hits=[]
+        for f in flags_found:
+            regex="[a-z0-9-]+(?={})".format(flags[f])
+            if re.search(regex,attributes):
+                hits=re.findall(regex,attributes)
+            elif re.search(regex,title):
+                hits=re.findall(regex,title)
+        if hits:
+            lvl1=search_all_targets(regex_dictio," ".join(hits))
+            
+    if len(lvl1)==1:
         return lvl1[0],1
     else:
         return "not_found",0
 
 #This function search for the target and fill different lists according to the confidence level of the research algorithms used"
-def search_target(regex_dictio,attributes,title,flags):
+def search_target(regex_dictio,attributes,title,source,flags):
     #if "Cut-and-Run_H2A" in title:
-    lvl1_1,lvl1_2,lvl1_3,lvl2,lvl3,lvl4,lvl5=[],[],[],[],[],[],[]
+    attributes=" | ".join([attributes,source])
+    lvl1,lvl1_1,lvl1_2,lvl1_3,lvl2,lvl3,lvl4,lvl5=[],[],[],[],[],[],[],[]
     # CONFIDENCE_1
+    flags_found=[]
     for att in attributes.lower().split(" | "):
         if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
-            flagged1=flagged2=[]
-            for f in flags:
+            lvl1+=search_all_targets(regex_dictio,att)
+            for f in flags.keys():
                 if re.search(flags[f],att):
-                    flagged1+=re.findall(flags[f],attributes.lower())
-                if re.search(flags[f],title.lower()):
-                    flagged2+=re.findall(flags[f],title.lower())
-            for t in regex_dictio:
-                lvl1_1+=search_this_target(regex_dictio,att,t)
-                lvl1_2+=search_this_target(regex_dictio,flagged1,t)
-                lvl1_3+=search_this_target(regex_dictio,flagged2,t)
-        lvl1=return_best_list([lvl1_1,lvl1_2,lvl1_3])
-    #print(lvl1,"\n\n")
-    if lvl1:
+                    flags_found.append(f)
+    if len(lvl1)==1:
+        return lvl1[0],1
+    elif flags_found:
+        hits=[]
+        for f in flags_found:
+            regex="[a-z0-9-]+(?={})".format(flags[f])
+            if re.search(regex,attributes):
+                hits=re.findall(regex,attributes)
+            elif re.search(regex,title):
+                hits=re.findall(regex,title)
+        if hits:
+            lvl1=search_all_targets(regex_dictio," ".join(hits))
+    if len(lvl1)==1:
         return lvl1[0],1
     else:
         for att in attributes.lower().split(" | "):
@@ -309,12 +322,6 @@ def remove_term(field):
     for term in terms:
         field=field.lower().replace(term,"")
     return field
-
-def get_GEO_ID(line):
-    GSM=list(set(re.findall("GSM[0-9]+",line["SAMPLE_NAME"])))
-    return " | ".join(GSM)
-
-
 
 
 """ ###############################################################################
@@ -459,7 +466,6 @@ def get_files(org,args,cores):
     print ('@INFO: ---> Done!\n', file=sys.stderr)
 
 def download_GSE(xml_links,outdir,GSE):
-    
     path="{}/{}.xml.tar.gz".format(outdir,GSE)
     urllib.request.urlretrieve(xml_links[GSE],path)
     tar=tarfile.open(path)
