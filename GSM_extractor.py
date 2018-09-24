@@ -17,6 +17,7 @@ import os
 import sys
 from multiprocessing import Pool
 import extract_xml
+import download_files
 import re
 from collections import OrderedDict
 from functools import partial
@@ -43,25 +44,18 @@ def main():
     except:
         print_help()
     if path=="online":
-        print("INFO: Online mode selected, downloading files...", file=sys.stderr)
-        try:
-            orgs=args["Organisms"].rstrip("\n").split(",")
-        except:
-            print("ERROR: Organisms not specified in congig.ini file.", file=sys.stderr)
-            quit()
-        path=args["xml_out"]
-        for org in orgs:        
-            get_files(org,args,cores)
-        print("INFO: --> Files downloaded succesfully.", file=sys.stderr)
+        download_files.download(args,cores)
 
     if os.path.isdir(path):
         print("INFO: Extracting samples from the GSE xml files...", file=sys.stderr)
         for root, dirs, files in os.walk(path):
             files=["{}/{}".format(path.rstrip("/"),filename) for filename in files]
-            tsv_pool=Pool(processes=cores)
-            list_of_lists_of_lines=tsv_pool.map(extract_xml.get_metadata,files)
-            lines = [item for sublist in list_of_lists_of_lines for item in sublist]
-            tsv_pool.close()
+            for f in files:
+                lines+=extract_xml.get_metadata(f)
+            #tsv_pool=Pool(processes=cores)
+            #list_of_lists_of_lines=tsv_pool.map(extract_xml.get_metadata,files)
+            #lines = list(set([item for sublist in list_of_lists_of_lines for item in sublist]))
+            #tsv_pool.close()
         print("INFO: --> Samples extracted succesfully.", file=sys.stderr)
         if "Create_tsv" in args and args["Create_tsv"].lower()=="true":
             print("INFO: Creating tsv file...", file=sys.stderr)
@@ -73,7 +67,8 @@ def main():
         with open(path, "r") as inf:
             lines=inf.readlines()
             lines=[x.rstrip("\n") for x in lines]
-
+    
+    
     print("INFO: Processing lines to find targeted proteins...", file=sys.stderr)
     process_pool=Pool(processes=cores)
     results=process_pool.map(process_line,lines)
@@ -96,7 +91,7 @@ def process_line(line):
     sample_title=line[5].lower()
     attributes=line[6].lower()
     source=line[7].lower()
-    flags={"FLAG":"-[0-9]*x?-?flag","MYC":"-[0-9]*x?-?myc|9e10","V5":"-[0-9]*x?-?v5","TAP":"-[0-9]*x?-?tap","HA":"-[0-9]*x?-?ha","GFP":"-[0-9]*x?-?e?gfp","T7":"-[0-9]*x?-?t7"}
+    flags={"FLAG":"(-|::)?[0-9]*x?-?flag","MYC":"(-|::)?[0-9]*x?-?myc|9e10","V5":"(-|::)?[0-9]*x?-?v5","TAP":"(-|::)?[0-9]*x?-?tap","HA":"(-|::)?[0-9]*x?-?ha","GFP":"(-|::)?[0-9]*x?-?e?gfp","T7":"(-|::)?[0-9]*x?-?t7"}
     #flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
     joined=strategy+sample_title+attributes
     if any (x in joined for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or strategy=="other":
@@ -139,7 +134,7 @@ def custom_case1(regex_dictio,sample_title):
 
 #This function checks and correct the library strategy field if needed
 def check_assay(info,strategy):
-    names={"BREAK-SEQ":"BREAK-?SEQ","BRDU-SEQ":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
+    names={"BREAK-SEQ":"BREAK-?SEQ","5HMC":"5HMC-?SEQ","BRDU-SEQ":"BRDU","ATAC-SEQ":"ATAC-?SEQ","CUT-AND-RUN":"CUT.?AND.?RUN","GRO-SEQ":"GRO-?SEQ","GRO-CAP":"GRO-?CAP","FAIRE-SEQ":"FAIRE","CHIP-EXO":"CHIP-?EXO","CHEC-SEQ":"CHEC-?SEQ","CHIP-ESPAN":"CHIP-?ESPAN"}
     for name in names:
         if re.search(names[name],info.upper())!=None:
             strategy=name
@@ -222,7 +217,7 @@ def confidence1_only(regex_dictio,attributes,title,source,flags):
     lvl1=[]
     flags_found=[]
     for att in attributes.lower().split(" | "):
-        if any(x in att for x in ["antibody:","chip:","protein:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
+        if any(x in att for x in ["antibody:","chip:"," ","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             lvl1+=search_all_targets(regex_dictio,att)
             for f in flags.keys():
                 if re.search(flags[f],att):
@@ -278,6 +273,7 @@ def search_target(regex_dictio,attributes,title,source,flags):
             if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
                 source_hits=search_all_targets(regex_dictio,att)
                 if len(source_hits)==1:
+                    print(title,attributes,source_hits)
                     return source_hits[0],2
         # CONFIDENCE_2_TO_4
         for t in regex_dictio:
@@ -404,79 +400,6 @@ def read_config():
 
 
 
-
-
-""" ###############################################################################
-    #                           ONLINE MODE MODULES                               #
-    ###############################################################################
-"""
-#Build and return a query for each month of the given year
-def build_query(args, org):
-    #adding the org
-    query=org+"[ORGN] "
-    #adding the search terms:
-    if "Search_terms" in args:
-        query+="AND {}".format(" AND ".join(args['Search_terms'].split(",")))
-    #adding the filter out terms:
-    if "Filter_out" in args:
-        query+=" NOT ( {} )".format(" OR ".join(args["Filter_out"].split(",")))
-    #adding the date
-    query+=" AND {}[PDAT]".format(args['Date_range'])
-    if "Custom" in args:
-        query+=" "+args['Custom']
-    return query
-
-# Send esearch query and return the resulting dictionary (containing the count, id of the samples etc...)
-def get_handle(query, database):
-    handle = Entrez.esearch(db=database,retmax=1000000, term=query)
-    dic=Entrez.read(handle)
-    return dic
-
-def get_files(org,args,cores):
-    outdir=args["xml_out"]
-    print ('@INFO: ---> Accounting for the xml already in the xnk_output folder...', file=sys.stderr)
-    already_there=[]
-    for root, dirs, files in os.walk(outdir):
-        for name in files:
-            path=outdir+"/"+name
-            if os.stat(path).st_size>0:
-                already_there.append(name.rstrip(".xml)"))
-    if len(already_there)>0:
-        print ('@INFO: ---> The xml for {} GSE are already in the output directory, they will not be downloaded again'.format(len(already_there)), file=sys.stderr)
-        print ('@INFO: ---> Fetching the remaining GSE IDs...', file=sys.stderr)
-    else:
-        print ('@INFO: ---> Fetching GSE IDs ...', file=sys.stderr)
-    Entrez.email = args["Entrez_email"]
-    query=build_query(args,org)
-    GSE_handle=get_handle(query,"gds")
-    xml_links={}
-    for GSE in GSE_handle['IdList']:
-        GSE="GSE{}".format(GSE.lstrip("2").lstrip("0"))
-        if GSE not in already_there:
-            index=len(GSE)-3
-            two_firsts=GSE[3:index]
-            xml_links[GSE]="ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE{}{}/{}/miniml/{}_family.xml.tgz".format(two_firsts,"nnn",GSE,GSE)
-    print ('@INFO: ---> {} series found.'.format(len(xml_links)), file=sys.stderr)
-    print ('@INFO: ---> Downloading xml files ...', file=sys.stderr)
-    #for GSE in xml_links.keys():
-    download_pool=Pool(processes=cores)
-    func=partial(download_GSE,xml_links,outdir)
-    download_pool.map(func,list(xml_links.keys()))
-    download_pool.close()
-    print ('@INFO: ---> Done!\n', file=sys.stderr)
-
-def download_GSE(xml_links,outdir,GSE):
-    path="{}/{}.xml.tar.gz".format(outdir,GSE)
-    urllib.request.urlretrieve(xml_links[GSE],path)
-    tar=tarfile.open(path)
-    content=""
-    for member in tar.getmembers():
-        if "family.xml" in str(member):
-            f=tar.extractfile(member)
-            content = f.read()
-            with open(path.rstrip(".tar.gz"),"wb") as outf:
-                outf.write(content)
-    os.remove(path)
 
 
 
