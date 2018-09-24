@@ -8,11 +8,10 @@ def get_metadata(xml_path):
         tree = ET.parse(xml_path)
         root = tree.getroot()
     except:
-        sys.exit()
+        return []
 
     lines=[]
     GSM_list=[]
-    metadata={}
 
     contributor="NOT_FOUND"
     organization="NOT_FOUND"
@@ -100,6 +99,22 @@ def get_metadata(xml_path):
                         corrected_GSM=GSM
                     if corrected_GSM not in GSM_list and organism.lower() in ["homo sapiens","mus musculus","drosophila melanogaster","saccharomyces cerevisiae","arabidopsis thaliana","caenorhabditis elegans","schizosaccharomyces pombe","rattus norvegicus","danio rerio","gallus gallus","pan troglodytes"]:
                         GSM_list.append(corrected_GSM)
-                        lines.append("\t".join([corrected_GSM,GSE,GPL,organism,library_strategy,sample_title," | ".join(attributes),sample_source,molecule,platform_technology,library_source,library_selection,series_title,series_sumary,series_design,contributor,organization,release_date,submission_date]).replace("\n",""))
-    #print(lines)
+                        lines.append("\t".join([corrected_GSM,GSE,GPL,organism,library_strategy,sample_title," | ".join(attributes),sample_source,molecule,platform_technology,library_source,library_selection,series_title,series_sumary,series_design,contributor,organization,release_date,submission_date]).replace("\n","").replace("  ",""))
+    attributes=" | ".join(attributes)
+    #if "epitope tags:" in attributes.lower():
+    #    print(GSM,sample_title,attributes)
     return lines
+
+def main():
+    lines=[]
+    if os.path.isdir(sys.argv[1]):
+        for root, dirs, files in os.walk(sys.argv[1]):
+            files=["{}/{}".format(sys.argv[1].rstrip("/"),filename) for filename in files]
+            for file in files:
+                lines+=get_metadata(file)
+    elif os.path.isfile(sys.argv[1]):
+        lines=get_metadata(sys.argv[1])
+    print(*list(set(lines)), sep='\n')
+
+if __name__ == "__main__":
+    main()
