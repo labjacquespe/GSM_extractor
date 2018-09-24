@@ -25,6 +25,9 @@ for l in file:
         good.append(",".join(l))
 
 if conflicted:
+    print("INFO: Done. Conflicts detected. Removed from output and saved in conflicted.txt", file=sys.stderr)
     with open("conflicted_targets.ignore","w") as outf:
         outf.write("\n".join(conflicted))
+else:
+    print("INFO: Done. No conflicts detected", file=sys.stderr)
 print(*good, sep='\n')
