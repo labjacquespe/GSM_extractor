@@ -100,9 +100,12 @@ def process_line(line):
                     target,confidence=get_target.search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags,series_title)
 
         elif strategy.lower() in ["mnase-seq", "other","brdu-seq"]:
-            target,confidence=get_target.confidence1_only(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags)
-            if confidence==0:
-                target=strategy.lower()
+            hits=get_target.confidence1(regex_dictio,remove_term(attributes),remove_term(sample_title),flags)
+            if len(hits)==1:
+                target,confidence=hits[0],1
+            else:
+                target,confidence=strategy.lower(),0
+
         else:
             target,confidence=strategy,0
     else:
