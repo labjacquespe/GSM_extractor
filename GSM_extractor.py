@@ -85,6 +85,7 @@ def process_line(line):
     sample_title=line[5].lower()
     attributes=line[6].lower()
     source=line[7].lower()
+    series_title=line[12].lower()
     flags={"FLAG":"(-|::)?[0-9]*x?-?flag","MYC":"(-|::)?[0-9]*x?-?myc|9e10","V5":"(-|::)?[0-9]*x?-?v5","TAP":"(-|::)?[0-9]*x?-?tap","HA":"(-|::)?[0-9]*x?-?ha","GFP":"(-|::)?[0-9]*x?-?e?gfp","T7":"(-|::)?[0-9]*x?-?t7"}
     #flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
     joined=strategy+sample_title+attributes
@@ -96,7 +97,7 @@ def process_line(line):
             else:
                 target,confidence=check_if_input(sample_title,attributes)
                 if confidence==0:
-                    target,confidence=get_target.search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags)
+                    target,confidence=get_target.search_target(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags,series_title)
 
         elif strategy.lower() in ["mnase-seq", "other","brdu-seq"]:
             target,confidence=get_target.confidence1_only(regex_dictio,remove_term(attributes),remove_term(sample_title),source,flags)

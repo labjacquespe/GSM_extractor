@@ -82,10 +82,10 @@ def confidence1_only(regex_dictio,attributes,title,source,flags):
         return "not_found",0
 
 #This function search for the target and fill different lists according to the confidence level of the research algorithms used"
-def search_target(regex_dictio,attributes,title,source,flags):
+def search_target(regex_dictio,attributes,title,source,flags,series_title):
     #if "Cut-and-Run_H2A" in title:
     attributes=" | ".join([attributes,source])
-    lvl1,lvl3,lvl4,lvl5=[],[],[],[]
+    lvl1,lvl2,lvl3,lvl4,lvl5=[],[],[],[],[]
     # CONFIDENCE_1
     flags_found=[]
     for att in attributes.lower().split(" | "):
@@ -111,10 +111,10 @@ def search_target(regex_dictio,attributes,title,source,flags):
     else:
         for att in attributes.lower().split(" | "):
             if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
-                source_hits=search_all_targets(regex_dictio,att)
-                if len(source_hits)==1:
-                    print(title,attributes,source_hits)
-                    return source_hits[0],2
+                lvl2=search_all_targets(regex_dictio,att)
+                if len(lvl2)==1:
+                    print(title,attributes,lvl2)
+                    return lvl2[0],2
         # CONFIDENCE_2_TO_4
         for t in regex_dictio:
             regex=regex_dictio[t].replace(r"(\D+|$)","")+r"(?=(_|\s|-)?(ip|chip|crosslinked|protein\schip|sonication_ip|chromatin\simmuno))"
@@ -124,8 +124,7 @@ def search_target(regex_dictio,attributes,title,source,flags):
                 lvl4.append(t)
         lvl3=rm_deltas(regex_dictio,lvl3,title.lower())
         lvl4=rm_deltas(regex_dictio,lvl4,title.lower())
-        lvl5=get_flagged(regex_dictio,title,flags)
-        lower_conf=[lvl3,lvl4,lvl5]
+        lower_conf=[lvl3,lvl4]
         for i in range(len(lower_conf)):
             if len(list(set(lower_conf[i])))==1:
                 return lower_conf[i][0],i+2
@@ -137,9 +136,13 @@ def search_target(regex_dictio,attributes,title,source,flags):
                         lvl4.remove(t)
         if len(lvl4)==1:
             return lvl4[0],4
-    lvl6=" & ".join(lvl4)
+    lvl5=list(set(search_all_targets(regex_dictio,series_title)))
+    if len(lvl5)==1:
+        return lvl5[0],5
+    lvl6=lvl1+lvl2+lvl3+lvl4+lvl5
+    lvl6=list(set(lvl6))
     if lvl6:
-        return lvl6,6
+        return " & ".join(lvl6),6
     else:
         return "not_found",0
 
