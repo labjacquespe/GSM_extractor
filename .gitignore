@@ -5,3 +5,4 @@ GSM_extractor_out.tsv
 xml_directories/*
 new_query/*
 big_query/*
+dictios/conflicts/*
