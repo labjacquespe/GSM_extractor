@@ -1,4 +1,3 @@
-GENE NAME,(gene name)
 CUP1-2,(cup-?1-?-?-?2(\D+|$))
 SGV1,(sgv-?1(\D+|$))
 RTC1,(rtc-?1(\D+|$))
