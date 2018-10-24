@@ -30,20 +30,24 @@ def search_all_targets(regex_dictio,field):
 def rm_deltas(regex_dictio,target_list,field):
     new=[]
     for t in target_list:
-        regex=r'((∆|d|d\(|delta|del)+(-|_)?'+regex_dictio[t]+'|'+regex_dictio[t].replace(r"(\D+|$)","")+r'-?(-as|δ|\stail\sdelete|del|\{delta\}|∆|aa|d|-(\s|_|$)))'
+        regex=r'((∆|d|d\(|delta|del)+(-|_)?'+regex_dictio[t]+'|'+regex_dictio[t].replace(r"(\D+|$)","")+r'-?(-as|-delta|δ|\stail\sdelete|del|\{delta\}|∆|aa|d|-(\s|_|$)))'
         if not re.search(regex,field.lower()):
             new.append(t)
     return new
 
 def search_target(regex_dictio,attributes,title,source,flags,series_title):
-    attributes=" | ".join([attributes,source])
+    attributes=" | ".join([attributes.lower(),source])
     c1=confidence1(regex_dictio,attributes,title,flags)
+    print("c1",c1)
     if len(c1)==1:
         return c1[0],1
-    c2=confidence2(regex_dictio,attributes,title)
+    c2=search_all_targets(regex_dictio,source)
+    print("c2",c2)
     if len(c2)==1:
         return c2[0],2
     c3,c4=confidence_3_4(regex_dictio,attributes,title)
+    print("c3",c3)
+    print("c4",c4)
     if len(c3)==1:
         return c3[0],3
     if len(c4)==1:
@@ -61,42 +65,33 @@ def confidence1(regex_dictio,attributes,title,flags):
     #This algorithm returns a target if it directly found in a high confidence field (HCF) or elsewhere associated with a flag found in a HCF
     lvl1=[]
     flags_found=[]
-    for att in attributes.lower().split(" | "):
-        if any(x in att for x in ["antibody:","chip:"," ","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
+    for att in attributes.split(" | "):
+        if any(x in att for x in ["antibody:","chip:","flag tagged:","target of ip:","epitope:","antibody #lot number:", "epitope tags:"]):
             lvl1+=search_all_targets(regex_dictio,att)
             for f in flags.keys():
                 if re.search(flags[f],att):
                     flags_found.append(f)
-    
     if len(lvl1)==1:
         return lvl1
     elif flags_found:
         hits=[]
         for f in flags_found:
-            regex="[a-z0-9-]+(?={})".format(flags[f])
-            if re.search(regex,attributes):
+            regex="[a-z0-9-]+({})".format(flags[f])   #rpb3-(?=(-|::)?[0-9]*x?-?flag)
+            if re.findall(regex,attributes):
                 hits=re.findall(regex,attributes)
-            elif re.search(regex,title):
+            elif re.findall(regex,title):
                 hits=re.findall(regex,title)
+            
         if hits:
             lvl1=search_all_targets(regex_dictio," ".join(hits))
     return list(set(lvl1))
 
-def confidence2(regex_dictio,attributes,title):
-    lvl2=[]
-    #this algorithm returns a target if a single hit is found in a medium condidence field
-    for att in attributes.lower().split(" | "):
-            if any(x in att for x in ["source name:","source_name:","antibody #lot number:"]):
-                lvl2=search_all_targets(regex_dictio,att)
-                if len(lvl2)==1:
-                    print(title,attributes,lvl2)
-    return list(set(lvl2))
-
 def confidence_3_4(regex_dictio,attributes,title):
+    attributes=[]
     lvl3=[]
     lvl4=[]
     for t in regex_dictio:
-        regex=regex_dictio[t].replace(r"(\D+|$)","")+r"(?=(_|\s|-)?(ip|chip|crosslinked|protein\schip|sonication_ip|chromatin\simmuno))"
+        regex=regex_dictio[t].replace(r"(\D+|$)","")+r"(?=(_|\s|-)?(ip|chip|crosslinked|protein\schip|sonication_ip|chromatin\simmuno|chec-seq))"
         if re.search(regex,title.lower()):
             lvl3.append(t)
         if re.search(regex_dictio[t],title.lower()):
@@ -108,7 +103,7 @@ def confidence_3_4(regex_dictio,attributes,title):
 
 def rm_strain(regex_dictio,attributes,l):
     if len(l)>1 and "strain:" in attributes:
-        for att in attributes.lower().split(" | "):
+        for att in attributes.split(" | "):
             if "strain:" in att:
                 for t in l:
                     if re.search(regex_dictio[t],att):

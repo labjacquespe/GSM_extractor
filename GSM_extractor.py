@@ -35,17 +35,21 @@ import xml.etree.ElementTree as ET
 """
 
 def main():
-    # Read arguments
-    lines=[]
+    #Reading config file and arguments
     try:
         args=read_config()
         cores=int(sys.argv[1])
         path=sys.argv[2]
     except:
         print_help()
+    
+    lines=[]
+    #If online mode, download the GSE files first
     if path=="online":
         download_files.download(args,cores)
+        path=args["xml_out"]
 
+    #If the path given is a directory, read all files and extract samples and fill the lines list
     if os.path.isdir(path):
         print("INFO: Extracting samples from the GSE xml files...", file=sys.stderr)
         for root, dirs, files in os.walk(path):
@@ -58,19 +62,20 @@ def main():
             with open("GSM_extractor_out.tsv","w") as outf:
                 outf.write("\n".join(lines))
             print("INFO: --> Tsv file created.", file=sys.stderr)
+    #if the path given is a file, read all lines and fill the lines list
     elif os.path.isfile(path):
         print("INFO: Reading lines from tsv file", file=sys.stderr)
         with open(path, "r") as inf:
             lines=inf.readlines()
             lines=[x.rstrip("\n") for x in lines]
     
-    
+    #Processing each line in parallel
     print("INFO: Processing lines to find targeted proteins...", file=sys.stderr)
     process_pool=Pool(processes=cores)
     results=process_pool.map(process_line,lines)
     print(*list(set(results)), sep='\n')
     print ('@INFO: Done!', file=sys.stderr)
-
+    
 
 ###############################################################################
     #                     METADATA PROCESSING MODULES                             #
@@ -78,7 +83,8 @@ def main():
 
 def process_line(line):
     line=line.rstrip("\n").split("\t")
-    regex_dictio=get_common_dict()
+    regex_dictio=get_dict(line[3].lower().replace(" ","_"))
+    #regex_dictio=get_common_dict()
     #0:corrected_GSM, 1:GSE, 2:GPL, 3:organism, 4:library_strategy, 5:sample_title, 6:attributes, 7:sample_source, 8:molecule, 9:platform_technology, 10:library_source, 11:library_selection, 12:series_title, 13:series_sumary, 14:series_design, 15:contributor, 16:organization, 17:release_date, 18:submission_date
     organism=line[3].lower()
     strategy=line[4].lower()
@@ -86,7 +92,7 @@ def process_line(line):
     attributes=line[6].lower()
     source=line[7].lower()
     series_title=line[12].lower()
-    flags={"FLAG":"(-|::)?[0-9]*x?-?flag","MYC":"(-|::)?[0-9]*x?-?myc|9e10","V5":"(-|::)?[0-9]*x?-?v5","TAP":"(-|::)?[0-9]*x?-?tap","HA":"(-|::)?[0-9]*x?-?ha","GFP":"(-|::)?[0-9]*x?-?e?gfp","T7":"(-|::)?[0-9]*x?-?t7"}
+    flags={"FLAG":"[0-9]*x?-?flag","MYC":"[0-9]*x?-?myc|9e10","V5":"[0-9]*x?-?v5","TAP":"[0-9]*x?-?tap","HA":"[0-9]*x?-?ha","GFP":"[0-9]*x?-?e?gfp","T7":"[0-9]*x?-?t7"}
     #flags={"FLAG":r"([^_\s]+-[0-9]*x?flag|[0-9]*x?flag-[^_\s]+|flag)","MYC":r"([^-_\s]+(-c)?-[0-9]*x?myc|(c-)?[0-9]*x?myc-[^_\s]+|(c-)?myc|9e10)","V5":r"([^_\s]+-[0-9]*x?v5|[0-9]*x?v5-[^_\s]+|v5)","TAP":r"([^_\s]+-[0-9]*x?tap|[0-9]*x?tap-[^_\s]+|tap)","HA":r"([^_\s]+-[0-9]*x?ha|[0-9]*x?ha-[^_\s]+|ha)","GFP":r"([^_\s]+-[0-9]*x?gfp|[0-9]*x?gfp-[^_\s]+|gfp)","T7":r"([^_\s]+-[0-9]*x?t7|[0-9]*x?t7-[^_\s]+|t7)"}
     joined=strategy+sample_title+attributes
     if any (x in joined for x in ["chip-seq","chip-exo","mnase-seq","chec-seq","cut-and-run"]) or strategy=="other":
