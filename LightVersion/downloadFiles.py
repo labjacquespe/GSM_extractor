@@ -85,7 +85,6 @@ def DownloadFiles(ftpLinks, outdir, GSE):
 ### Construction of the ftp download links
 def GetFTP(handle, existing):
     ftpLinks={}
-    print(len(handle['IdList']))
     for GSE in handle['IdList']:
         GSE="GSE{}".format(GSE.lstrip("2").lstrip("0")) #Removing the database code from the ID (ids in the query starts with the database ID (20 and 200 for GSE) followed by the GEO ID )
         if GSE not in existing:

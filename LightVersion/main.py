@@ -3,12 +3,14 @@ import os
 import utilities
 import downloadFiles
 import extractMeta
+from multiprocessing import Pool
+import processLine
 
 
 def main():
     lines=[]
     try:
-        args=utilities.readConfig()
+        args=utilities.ReadConfig()
         cores=int(sys.argv[1])
         path=sys.argv[2]
     except:
@@ -18,12 +20,21 @@ def main():
         path=args["xml_out"]
         downloadFiles.Download(args,cores,path)
     if os.path.isdir(path):
+        print("extracting metadata from the xml files...", file=sys.stderr)
         lines=ExtractMetadata(args, path)
     elif os.path.isfile(path):
         with open(path, "r") as inf:
             lines=[x.rstrip("\n") for x in inf.readlines()]
+    print("Removing dupplicates...", file=sys.stderr)
     lines=RemoveDuplicates(lines)
-    #PROCESS LINE TODO
+    with open("backupMeta.txt", "w") as bkupFile:
+        bkupFile.write("\n".join(lines))
+    print("Searching for targets...", file=sys.stderr)
+    lineProcessingPool=Pool(processes=cores)
+    processedLines=lineProcessingPool.map(processLine.Process,lines)
+    lineProcessingPool.close()
+    print(*processedLines, sep='\n')
+
 
 def RemoveDuplicates(lines):
     dictio = {}
@@ -36,7 +47,9 @@ def RemoveDuplicates(lines):
                 dictio[GSM][1]+=","+GSE
         else:
             dictio[GSM]=line
-    return dictio.values()
+    lines = list(dictio.values())
+    lines = ["\t".join(x) for x in lines]
+    return lines
 
 def ExtractMetadata(args, path):
     lines=[]

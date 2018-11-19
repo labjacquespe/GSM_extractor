@@ -1,7 +1,7 @@
 ATRX,(atrx)
 TFIIB,(tfiib)
 NC2BETA,(nc2β)
-RNAPII_TYR1P,(61383(\D+|$)|mabe350(\D+|$))
+RNAPII_TYR1P,(rnapii.?tyr1p!61383(\D+|$)|mabe350(\D+|$))
 RNAPII_SER2P,(pol2-?ser2|ser2-?p|ser2-po4(\D+|$)|ab24758(\D+|$)|ab193468(\D+|$)|ab5095(\D+|$)|cma602(\D+|$)|s2\sphosphorylated\srna\spolii|3e10(\D+|$))
 RNAPII_SER5P,(4h8(\D+|$)|ab5408(\D+|$)|ser-?5p|ab55208(\D+|$)|ab140748(\D+|$)|ab5401(\D+|$)|cma603(\D+|$)|ab193467(\D+|$)|ab5131(\D+|$)|s(er)?5\sphosphorylated\srna\spolii)
 RNAPII_SER7P,(ser-?7p|ab126537(\D+|$))
